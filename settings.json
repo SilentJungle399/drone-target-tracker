@@ -1,0 +1,9 @@
+{
+	"rpi": {
+		"device": "/dev/ttyAMA0",
+		"baud": 115200
+	},
+	"sim": {
+		"device": "tcp:127.0.0.1:5762"
+	}
+}
