@@ -18,7 +18,7 @@ picam2 = Picamera2()
 picam2.configure(picam2.create_still_configuration(main={"size": (320, 320)}))
 picam2.start()
 
-config = json.load(open("settings.json"))["rpi" if sys.platform == "linux" else "sim"]
+config = json.load(open("../settings.json"))["rpi" if sys.platform == "linux" else "sim"]
 master = mavutil.mavlink_connection(**config)
 
 master.wait_heartbeat()

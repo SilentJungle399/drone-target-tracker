@@ -12,7 +12,7 @@ from picamera2 import Picamera2
 print("Waiting for connection")
 
 # Load config based on platform
-config = json.load(open("settings.json"))["rpi" if sys.platform == "linux" else "sim"]
+config = json.load(open("../settings.json"))["rpi" if sys.platform == "linux" else "sim"]
 
 master = mavutil.mavlink_connection(**config)
 master.wait_heartbeat()
