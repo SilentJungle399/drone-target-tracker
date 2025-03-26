@@ -3,7 +3,7 @@
 This repository documents the entire development process, from initial sensor tests to full autonomous flight implementation.
 
 ## Project Overview
-This project involves mapping a field through manual flight to identify possible bullseye locations. The drone then executes an autonomous flight, taking off to 25m and navigating through waypoints while searching for a bullseye using a downward-facing camera. An object detection model (from another repository, placeholder for link) is used to detect the bullseye. Upon detecting a bullseye, the drone centers itself over it, hovers for 5 seconds to record GPS coordinates, and proceeds to the next waypoint. This process continues until all waypoints are cleared.
+This project involves mapping a field through manual flight to identify possible bullseye locations. The drone then executes an autonomous flight, taking off to 25m and navigating through waypoints while searching for a bullseye using a downward-facing camera. An object detection model ([SilentJungle399/bullseye-model](https://github.com/SilentJungle399/bullseye-model)) is used to detect the bullseye. Upon detecting a bullseye, the drone centers itself over it, hovers for 5 seconds to record GPS coordinates, and proceeds to the next waypoint. This process continues until all waypoints are cleared.
 
 ## Approach
 The project began with initial testing to verify Pixhawk connectivity, retrieve sensor and GPS data, and send MAVLink commands.
