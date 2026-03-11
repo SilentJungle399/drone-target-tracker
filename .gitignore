@@ -1,1 +1,9 @@
 .vscode
+*.bin
+terrain
+default_params
+
+__pycache__
+logs
+
+*.json
