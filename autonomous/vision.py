@@ -32,6 +32,7 @@ class CameraManager:
         while not self._stop_event.is_set():
             ret, frame = self.cap.read()
             if ret:
+                frame = cv2.flip(frame, -1)
                 with self._lock:
                     self.frame = frame
 

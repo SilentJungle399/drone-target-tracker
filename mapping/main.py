@@ -41,7 +41,7 @@ except Exception as e:
     sys.exit(1)
 
 print("Initializing webcam...")
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
 print("Starting main loop...")
 
@@ -58,12 +58,29 @@ frame_interval = 1 / 20
 last_frame_time = 0
 
 
-def is_new_point(lat, lon, threshold=2):
-    """Return True if (lat, lon) is farther than threshold metres from all stored points."""
-    for pt in gps_points:
+def update_or_add_point(lat, lon, alt, timestamp, pixel_dist, threshold=2):
+    """Add a new GPS point, or overwrite an existing nearby one if this detection is closer to the frame centre.
+    Returns 'NEW', 'UPDATED', or 'DUPLICATE'."""
+    for i, pt in enumerate(gps_points):
         if geodesic((lat, lon), (pt["lat"], pt["lon"])).meters < threshold:
-            return False
-    return True
+            if pixel_dist < pt.get("pixel_dist", float("inf")):
+                gps_points[i] = {
+                    "lat": lat,
+                    "lon": lon,
+                    "alt": alt,
+                    "timestamp": timestamp,
+                    "pixel_dist": pixel_dist,
+                }
+                return "UPDATED"
+            return "DUPLICATE"
+    gps_points.append({
+        "lat": lat,
+        "lon": lon,
+        "alt": alt,
+        "timestamp": timestamp,
+        "pixel_dist": pixel_dist,
+    })
+    return "NEW"
 
 
 # Main loop
@@ -76,6 +93,8 @@ try:
         if not ret:
             print("Failed to grab frame")
             break
+
+        frame = cv2.flip(frame, -1)
 
         # --- FPS limiter: skip heavy processing until interval has passed ---
         if now - last_frame_time < frame_interval:
@@ -103,15 +122,15 @@ try:
         h, w = annotated_frame.shape[:2]
 
         # --- Draw acceptance region (centre 50% of frame) ---
-        ax1, ay1 = int(0.25 * w), int(0.25 * h)
-        ax2, ay2 = int(0.75 * w), int(0.75 * h)
+        ax1, ay1 = int(0.40 * w), int(0.40 * h)
+        ax2, ay2 = int(0.60 * w), int(0.60 * h)
         cv2.rectangle(annotated_frame, (ax1, ay1), (ax2, ay2), (0, 255, 255), 2)
 
         # --- Process detections ---
         for r in results:
             for box in r.boxes:
                 confidence = float(box.conf[0])
-                if confidence <= 0.5:
+                if confidence <= 0.7:
                     continue
 
                 class_name = model.names[int(box.cls[0])]
@@ -130,23 +149,16 @@ try:
                     x("NO GPS")
                     continue
 
-                if not is_new_point(last_lat, last_lon):
-                    x("DUPLICATE")
-                    continue
+                frame_cx, frame_cy = w / 2, h / 2
+                pixel_dist = ((cx - frame_cx) ** 2 + (cy - frame_cy) ** 2) ** 0.5
 
-                x("ACCEPTED")
+                result = update_or_add_point(last_lat, last_lon, last_alt, now, pixel_dist)
+                x(result)
 
-                entry = {
-                    "lat": last_lat,
-                    "lon": last_lon,
-                    "alt": last_alt,
-                    "timestamp": now,
-                }
-                gps_points.append(entry)
-
-                print("====================")
-                print(f"New GPS Point Recorded: {entry}")
-                print("====================")
+                if result in ("NEW", "UPDATED"):
+                    print("====================")
+                    print(f"GPS Point {result}: lat={last_lat}, lon={last_lon}, alt={last_alt}, pixel_dist={pixel_dist:.1f}")
+                    print("====================")
 
 
         # --- Throttled JSON save (every 2 seconds) ---
