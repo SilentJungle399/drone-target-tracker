@@ -1,6 +1,7 @@
 import time
 import json
 import sys
+import math
 
 from pymavlink import mavutil
 
@@ -11,7 +12,7 @@ class MavlinkController:
 
     def __init__(self):
         config = {
-            "device": "tcp:127.0.0.1:5762",
+            "device": "tcp:127.0.0.1:5763",
         }
 
         self.master = mavutil.mavlink_connection(**config)
@@ -37,6 +38,14 @@ class MavlinkController:
             self.master.target_component,
             mavutil.mavlink.MAV_DATA_STREAM_EXTENDED_STATUS,
             2,
+            1
+        )
+
+        self.master.mav.request_data_stream_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_DATA_STREAM_EXTRA1,  # includes ATTITUDE
+            10,
             1
         )
 
@@ -122,10 +131,27 @@ class MavlinkController:
             alt
         )
 
+    def _get_current_yaw(self):
+        """Returns current yaw in radians from ATTITUDE telemetry.
+        Falls back to GLOBAL_POSITION_INT heading if ATTITUDE is unavailable."""
+        att = self.master.recv_match(type='ATTITUDE', blocking=True, timeout=0.5)
+        if att:
+            return att.yaw  # already in radians, NED frame
+        # Fallback: convert compass heading (cdeg) from GLOBAL_POSITION_INT to radians
+        gps = self.master.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=0.5)
+        if gps:
+            return math.radians(gps.hdg / 100.0)
+        return 0.0
+
     def send_ned_velocity(self, vx, vy, vz=0.0):
-        # type_mask: ignore position + acceleration + yaw, use velocity only
+        # type_mask: ignore position + acceleration + yaw_rate; use velocity + yaw
+        # bit=1 means IGNORE, bit=0 means USE
         # bits: yaw_rate(11) yaw(10) az(8) ay(7) ax(6) | vz(5) vy(4) vx(3) | z(2) y(1) x(0)
-        type_mask = 0b110111000111  # 3527
+        # bit 10 cleared → yaw IS used (drone holds current heading)
+        # bit 11 set     → yaw_rate is ignored
+        type_mask = 0b100111000111  # 2503
+
+        yaw = self._get_current_yaw()
 
         self.master.mav.set_position_target_local_ned_send(
             0,
@@ -136,7 +162,7 @@ class MavlinkController:
             0, 0, 0,       # position (ignored)
             vx, vy, vz,    # velocity m/s
             0, 0, 0,       # acceleration (ignored)
-            0, 0           # yaw, yaw_rate (ignored)
+            yaw, 0         # yaw locked to current heading; yaw_rate ignored
         )
             
     def land(self):
