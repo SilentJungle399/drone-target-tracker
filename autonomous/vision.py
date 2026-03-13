@@ -12,7 +12,7 @@ class CameraManager:
     VideoCapture instance.  All program stages share one CameraManager so the
     capture device is opened only once."""
 
-    def __init__(self, src=0):
+    def __init__(self, src=1):
         self.cap = cv2.VideoCapture(src)
         self.frame = None
         self._lock = threading.Lock()
