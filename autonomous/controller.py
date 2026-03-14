@@ -2,10 +2,14 @@ import time
 import json
 import sys
 import math
+import logging
 
 from pymavlink import mavutil
 
 from config import TARGET_ALTITUDE
+
+
+logger = logging.getLogger(__name__)
 
 
 class MavlinkController:
@@ -17,7 +21,7 @@ class MavlinkController:
 
         self.master = mavutil.mavlink_connection(**config)
         self.master.wait_heartbeat()
-        print("Heartbeat received")
+        logger.info("Heartbeat received")
 
         self.master.target_system = 1
         self.master.target_component = 1
@@ -54,7 +58,7 @@ class MavlinkController:
             msg = self.master.recv_match(type='COMMAND_ACK', blocking=True)
 
             if msg and msg.command == command:
-                print("ACK received", msg.result)
+                logger.info("ACK received %s", msg.result)
                 return msg.result
 
     def set_mode(self, mode):
@@ -66,11 +70,11 @@ class MavlinkController:
             mode_id
         )
 
-        print("Mode ->", mode)
+        logger.info("Mode -> %s", mode)
         time.sleep(2)
 
     def arm_and_takeoff(self, target_altitude=TARGET_ALTITUDE):
-        print("Arming")
+        logger.info("Arming")
 
         self.master.mav.command_long_send(
             self.master.target_system,
@@ -81,7 +85,7 @@ class MavlinkController:
         )
 
         self.wait_for_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM)
-        print("Takeoff")
+        logger.info("Takeoff")
 
         self.master.mav.command_long_send(
             self.master.target_system,
@@ -115,7 +119,7 @@ class MavlinkController:
         return msg.wp_dist, msg.nav_bearing
 
     def send_navigate_command(self, lat, lon, alt=TARGET_ALTITUDE):
-        print("Navigating ->", lat, lon)
+        logger.info("Navigating -> %s %s", lat, lon)
 
         self.master.mav.mission_item_send(
             0,
@@ -149,7 +153,7 @@ class MavlinkController:
         # bits: yaw_rate(11) yaw(10) az(8) ay(7) ax(6) | vz(5) vy(4) vx(3) | z(2) y(1) x(0)
         # bit 10 cleared → yaw IS used (drone holds current heading)
         # bit 11 set     → yaw_rate is ignored
-        type_mask = 0b100111000111  # 2503
+        type_mask = 0b111111000111  # 2503
 
         yaw = self._get_current_yaw()
 
@@ -160,13 +164,15 @@ class MavlinkController:
             mavutil.mavlink.MAV_FRAME_LOCAL_NED,
             type_mask,
             0, 0, 0,       # position (ignored)
-            vx, vy, vz,    # velocity m/s
+            vy, (-1)*vx, vz,    # velocity m/s
+            # vx, vy, vz,    # velocity m/s
+            # (-1)*vx, (-1)*vy, (-1)*vz,    # velocity m/s
             0, 0, 0,       # acceleration (ignored)
-            yaw, 0         # yaw locked to current heading; yaw_rate ignored
+            0, 0         # yaw locked to current heading; yaw_rate ignored
         )
             
     def land(self):
-        print("Landing")
+        logger.info("Landing")
 
         self.master.mav.command_long_send(
             self.master.target_system,
@@ -179,7 +185,7 @@ class MavlinkController:
         self.wait_for_ack(mavutil.mavlink.MAV_CMD_NAV_LAND)
 
     def disarm(self):
-        print("Disarming")
+        logger.info("Disarming")
 
         self.master.mav.command_long_send(
             self.master.target_system,

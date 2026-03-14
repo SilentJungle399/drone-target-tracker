@@ -1,5 +1,6 @@
 import time
 import json
+import logging
 
 from geopy.distance import geodesic
 
@@ -16,6 +17,9 @@ from controller import MavlinkController
 from vision import Vision
 
 
+logger = logging.getLogger(__name__)
+
+
 class Mission:
     def __init__(self, controller, vision):
         self.controller: MavlinkController = controller
@@ -24,6 +28,14 @@ class Mission:
             [29.9499810, 76.8160079],
             [29.9498973, 76.8164974],
             [29.9493210, 76.8165068]
+
+            # [29.9471718, 76.8166544],
+            # [29.9471915, 76.8165109],
+            # [29.9472107, 76.8163707]
+
+            # [29.9448095, 76.8174168],
+            # [29.9449071, 76.8172728],
+            # [29.94508, 76.8172765]
         ]
         self.visited = set()
 
@@ -31,40 +43,57 @@ class Mission:
         min_distance = float("inf")
         nearest = None
 
+        # for lat, lon in self.bullseye_locations:
+        #     if (lat, lon) not in self.visited:
+        #         dist = geodesic(
+        #             (current_lat, current_lon),
+        #             (lat, lon)
+        #         ).meters
+
+        #         if dist < min_distance:
+        #             min_distance = dist
+        #             nearest = (lat, lon)
+
+        # return first unvisited target (no dynamic nearest selection)
         for lat, lon in self.bullseye_locations:
             if (lat, lon) not in self.visited:
-                dist = geodesic(
-                    (current_lat, current_lon),
-                    (lat, lon)
-                ).meters
-
-                if dist < min_distance:
-                    min_distance = dist
-                    nearest = (lat, lon)
+                nearest = (lat, lon)
+                break
 
         return nearest
 
     def hover_and_record(self):
         readings = []
 
-        print("Recording points:")
-        print("-----------------")
-        for i in range(5):
+        logger.info("Recording points:")
+        logger.info("-----------------")
+        # for i in range(5):
+        #     coords = self.controller.get_gps_reading()
+        #     logger.info("%s.) %s", i + 1, coords)
+        #     readings.append(coords)
+        #     break
+        #     time.sleep(1)
+
+        t1 = time.time()
+
+        while time.time() - t1 < 11:
             coords = self.controller.get_gps_reading()
-            print(f"{i + 1}.) {coords}")
+            
+            if len(readings) % 10 == 0:
+                logger.info("%s.) %s", len(readings) + 1, coords)
+
             readings.append(coords)
-            break
-            time.sleep(1)
+            time.sleep(0.1)
 
         lat = sum(r[0] for r in readings) / len(readings)
         lon = sum(r[1] for r in readings) / len(readings)
 
-        print(f"\nFinal coords: {lat}, {lon}")
+        logger.info("Final coords: %s, %s", lat, lon)
 
         return lat, lon
 
     def return_land_disarm(self, home_lat, home_lon):
-        print("Returning to home")
+        logger.info("Returning to home")
 
         self.controller.set_mode("GUIDED")
         self.controller.send_navigate_command(home_lat, home_lon)
@@ -81,11 +110,11 @@ class Mission:
             progress = 1 - (dist_to_home / total_dist)
 
             if progress - last_print >= 1:
-                print(f"{int(progress*100)}% complete | {dist_to_home:.2f}m remaining")
+                logger.info("%s%% complete | %.2fm remaining", int(progress * 100), dist_to_home)
                 last_print = progress
 
             if dist_to_home < 2:  # within 2 meters of home
-                print("Reached home")
+                logger.info("Reached home")
                 break
 
             self.vision.show_preview()
@@ -114,7 +143,7 @@ class Mission:
         if abs(dx) > CENTER_TOLERANCE:
             vy = CORRECTION_SPEED if dx > 0 else -CORRECTION_SPEED
 
-        print("NED correction -> vx", vx, "vy", vy)
+        logger.info("NED correction -> vx %s vy %s", vx, vy)
         self.controller.send_ned_velocity(vx, vy, 0)
 
         return False
@@ -127,7 +156,7 @@ class Mission:
         self.controller.arm_and_takeoff()
 
         home_lat, home_lon = self.controller.get_gps_reading()
-        print("Home position saved:", home_lat, home_lon)
+        logger.info("Home position saved: %s %s", home_lat, home_lon)
 
         _, _, alt = self.controller.get_gps_reading(alt=True)
         start = time.time()
@@ -137,7 +166,7 @@ class Mission:
                 raise Exception("Takeoff timeout")
 
             _, _, alt = self.controller.get_gps_reading(alt=True)
-            print("Altitude:", alt)
+            logger.info("Altitude: %s", alt)
             self.vision.show_preview()
 
         while len(self.visited) < len(self.bullseye_locations):
@@ -148,13 +177,13 @@ class Mission:
                 break
 
             self.controller.send_navigate_command(*target)
-            print("Flying to target")
+            logger.info("Flying to target")
 
             req_dist = geodesic((current_lat, current_lon), target).meters
             travelled_distance = 0
 
-            print((current_lat, current_lon), target)
-            print(req_dist)
+            logger.info("From %s to %s", (current_lat, current_lon), target)
+            logger.info("Required distance: %s", req_dist)
 
             while True:
                 new_lat, new_lon = self.controller.get_gps_reading()
@@ -163,10 +192,10 @@ class Mission:
                 if dist_to_target < 2:  # arrival threshold
                     break
 
-                print("Distance remaining:", dist_to_target)
+                logger.info("Distance remaining: %s", dist_to_target)
                 self.vision.show_preview()
 
-            print("Arrived at waypoint")
+            logger.info("Arrived at waypoint")
 
             corrections = 0
             centered = False
@@ -179,15 +208,21 @@ class Mission:
 
                 if not detected:
                     if not lost:
-                        print("Target lost")
+                        logger.info("Target lost")
 
                     lost = True
+                    no_detection_since = time.time() if no_detection_since is None else no_detection_since
+
+                    if no_detection_since and time.time() - no_detection_since > 5:
+                        logger.info("No detection for 5 seconds, moving to next target")
+                        break
 
                     self.controller.send_ned_velocity(0, 0, 0)
                     time.sleep(0.05)
                     continue
                 else:
                     lost = False
+                    no_detection_since = None
 
                 centered = self.adjust_drone_position(center_x, center_y)
 
@@ -198,18 +233,18 @@ class Mission:
                 time.sleep(0.05)
 
             if centered:
-                print("Bullseye centered")
+                logger.info("Bullseye centered")
             else:
-                print("Max corrections reached")
+                logger.info("Max corrections reached")
 
             lat, lon = self.hover_and_record()
             self.visited.add(target)
-            print("Recorded:", lat, lon)
+            logger.info("Recorded: %s %s", lat, lon)
 
             with open("visited.json", "w") as f:
                 json.dump(list(self.visited), f, indent=4)
 
             self.controller.set_mode("GUIDED")
 
-        print("Mission complete")
+        logger.info("Mission complete")
         self.return_land_disarm(home_lat, home_lon)

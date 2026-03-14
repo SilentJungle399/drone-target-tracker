@@ -1,5 +1,11 @@
 import json
+import logging
 from geopy.distance import geodesic
+
+from logger_config import setup_logging
+
+setup_logging("mapping_gen_points")
+logger = logging.getLogger(__name__)
 
 # Load GPS data from JSON
 with open("gps_paths.json", "r") as file:
@@ -25,4 +31,4 @@ for lat, lon, detect in gps_data:
         visited.add((lat, lon))
 
 # Output result
-print("Detected Bullseye Locations:", bullseye_locations)
+logger.info("Detected Bullseye Locations: %s", bullseye_locations)

@@ -2,9 +2,13 @@ import cv2
 import time
 import threading
 import numpy as np
+import logging
 from ultralytics import YOLO
 
 from config import FRAME_WIDTH, FRAME_HEIGHT, YOLO_CONFIDENCE, CENTER_TOLERANCE
+
+
+logger = logging.getLogger(__name__)
 
 
 class CameraManager:
@@ -55,7 +59,7 @@ class Vision:
         self.controller = controller  # only needed in dev mode for heading compensation
 
         self.model = YOLO("best-colab.pt", task="detect").to("cuda")
-        print("YOLO model loaded")
+        logger.info("YOLO model loaded")
 
         self.camera = CameraManager().start()
 

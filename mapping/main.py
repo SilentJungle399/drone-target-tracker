@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import logging
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -8,7 +9,12 @@ from pymavlink import mavutil
 from geopy.distance import geodesic
 import time
 
-print("Waiting for connection")
+from logger_config import setup_logging
+
+setup_logging("mapping")
+logger = logging.getLogger(__name__)
+
+logger.info("Waiting for connection")
 
 master = mavutil.mavlink_connection("tcp:127.0.0.1:5763")
 
@@ -16,10 +22,10 @@ gps_points = []
 
 try:
     master.wait_heartbeat(timeout=30)
-    print("MAVLink Connection Established")
+    logger.info("MAVLink Connection Established")
 except Exception as e:
-    print(f"MAVLink Connection Failed: {e}")
-    print("Continuing in simulation/debug mode...")
+    logger.exception("MAVLink Connection Failed: %s", e)
+    logger.info("Continuing in simulation/debug mode...")
     master = None
 
 # Request GPS Data Stream if connected
@@ -34,16 +40,16 @@ if master:
 
 try:
     model = YOLO("best-colab.pt", task="detect").to("cuda")
-    print("Loaded YOLO model")
+    logger.info("Loaded YOLO model")
 except Exception as e:
-    print(f"Failed to load YOLO model: {e}")
-    print("Make sure best-colab.pt exists in the current directory")
+    logger.exception("Failed to load YOLO model: %s", e)
+    logger.info("Make sure best-colab.pt exists in the current directory")
     sys.exit(1)
 
-print("Initializing webcam...")
-cap = cv2.VideoCapture(1)
+logger.info("Initializing webcam...")
+cap = cv2.VideoCapture(0)
 
-print("Starting main loop...")
+logger.info("Starting main loop...")
 
 # Last known valid GPS state
 last_lat = None
@@ -91,7 +97,7 @@ try:
         # Capture frame from webcam
         ret, frame = cap.read()
         if not ret:
-            print("Failed to grab frame")
+            logger.error("Failed to grab frame")
             break
 
         frame = cv2.flip(frame, -1)
@@ -113,7 +119,7 @@ try:
                 last_lat = msg.lat / 1e7
                 last_lon = msg.lon / 1e7
                 last_alt = msg.alt / 1000.0
-                print(f"Lat={last_lat:.6f}, Lon={last_lon:.6f} | Points: {len(gps_points)}")
+                logger.info("Lat=%.6f, Lon=%.6f | Points: %s", last_lat, last_lon, len(gps_points))
 
         # --- Run YOLO detection ---
         results = model(frame, verbose=False)
@@ -138,7 +144,7 @@ try:
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
 
-                x = lambda prefix: print(f"[{prefix}] Detected: conf={confidence:.2f} center=({cx:.0f},{cy:.0f})")
+                x = lambda prefix: logger.info("[%s] Detected: conf=%.2f center=(%.0f,%.0f)", prefix, confidence, cx, cy)
 
                 # Only record if centre is inside acceptance region
                 if not (ax1 <= cx <= ax2 and ay1 <= cy <= ay2):
@@ -156,9 +162,16 @@ try:
                 x(result)
 
                 if result in ("NEW", "UPDATED"):
-                    print("====================")
-                    print(f"GPS Point {result}: lat={last_lat}, lon={last_lon}, alt={last_alt}, pixel_dist={pixel_dist:.1f}")
-                    print("====================")
+                    logger.info("====================")
+                    logger.info(
+                        "GPS Point %s: lat=%s, lon=%s, alt=%s, pixel_dist=%.1f",
+                        result,
+                        last_lat,
+                        last_lon,
+                        last_alt,
+                        pixel_dist,
+                    )
+                    logger.info("====================")
 
 
         # --- Throttled JSON save (every 2 seconds) ---
@@ -188,13 +201,13 @@ try:
             break
 
 except KeyboardInterrupt:
-    print("\nInterrupted by user")
+    logger.info("Interrupted by user")
 except Exception as e:
     raise e
 finally:
     # Final save before exit
     json.dump(gps_points, open("gps_path.json", "w"), indent=4)
-    print("Cleaning up...")
+    logger.info("Cleaning up...")
     cap.release()
     cv2.destroyAllWindows()
-    print("Done")
+    logger.info("Done")
