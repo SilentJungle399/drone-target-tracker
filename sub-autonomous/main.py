@@ -2,7 +2,7 @@ from logger_config import setup_logging
 
 setup_logging("sub_autonomous")
 
-from config import ANGLE_DEG, SPACING
+from config import ANGLE_DEG, SPACING, SCOUT_CONNECTION, SPRAYER_CONNECTION
 
 from controller import MavlinkController
 from mission import Mission
@@ -10,12 +10,16 @@ from vision import Vision
 
 import json
 import math
+import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from pyproj import Transformer
 from shapely.affinity import rotate, translate
 from shapely.geometry import LineString, MultiLineString, Polygon
+
+
+logger = logging.getLogger(__name__)
 
 
 def read_kml_polygon(kml_path: Path) -> Polygon:
@@ -113,33 +117,54 @@ def get_kml_waypoints(kml_path: Path):
     )
     waypoints = generate_waypoints(lines, transformer, angle_deg = ANGLE_DEG)
 
-    print(f"Generated {len(waypoints)} waypoints.")
+    logging.info(f"Generated {len(waypoints)} waypoints.")
     
     return waypoints[::-1]
 
 def main():
-    # waypoints = get_kml_waypoints(Path("map.kml"))
+    waypoints_scout = get_kml_waypoints(Path("map.kml"))
 
-	# lhc ground
-    waypoints = [
-        [29.9451178, 76.8172203],
-        [29.9450621, 76.8173772],
-		[29.9448785, 76.8173812],
-	]
-
-    controller = MavlinkController()
-    vision = Vision()
+    controller_scout = MavlinkController(device = SCOUT_CONNECTION)
+    vision_scout = Vision()
 
     try:
-        mission = Mission(
-            controller, 
-            waypoints = waypoints, 
-            vision = vision
+        mission_scout = Mission(
+            controller_scout, 
+            waypoints = waypoints_scout, 
+            vision = vision_scout
         )
-        mission.run()
+        mission_scout.run_scout()
     finally:
         pass
-        vision.release()
+        vision_scout.release()
+        controller_scout.destroy()
+
+        logging.info("Scout finished mapping.")
+
+    waypoints_sprayer = []
+    # extract coordinates from gps_path.json
+    with open("gps_path.json", "r", encoding="utf-8") as file:
+        gps_data = json.load(file)
+
+        for coord in gps_data:
+            lat = coord["lat"]
+            lon = coord["lon"]
+            alt = coord["alt"]
+
+            waypoints_sprayer.append([lat, lon])
+
+        logging.info(f"Loaded {len(waypoints_sprayer)} waypoints for sprayer.")
+
+    try:
+        controller_sprayer = MavlinkController(device = SPRAYER_CONNECTION)
+        mission_sprayer = Mission(
+            controller_sprayer, 
+            waypoints = waypoints_sprayer, 
+        )
+        mission_sprayer.run_sprayer()
+    finally:
+        pass
+        controller_sprayer.destroy()
 
 
 if __name__ == "__main__":

@@ -62,23 +62,40 @@ class CameraManager:
         self.cap.release()
         cv2.destroyAllWindows()
 
-
 class Vision:
     def __init__(self):
         self.camera = CameraManager().start()
 
-    @staticmethod
-    def yellow_mask(frame):
+        # Pre-create kernel (avoid realloc every frame)
+        self.kernel = np.ones((5, 5), np.uint8)
+
+    def preprocess(self, frame):
+        # Light blur → reduces noise without heavy cost
+        return cv2.GaussianBlur(frame, (5, 5), 0)
+
+    def yellow_mask(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
         lower = np.array(HSV_LOWER, dtype=np.uint8)
         upper = np.array(HSV_UPPER, dtype=np.uint8)
-        return cv2.inRange(hsv, lower, upper)
+
+        mask = cv2.inRange(hsv, lower, upper)
+
+        # ---- Morphological cleanup ----
+        # Remove small noise
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel)
+
+        # Merge fragmented regions
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
+
+        return mask
 
     def detect_target(self):
         frame = self.camera.get_frame()
         if frame is None:
             return False, None, None, 0.0, float("inf"), None, None
 
+        frame = self.preprocess(frame)
         mask = self.yellow_mask(frame)
 
         contours, _ = cv2.findContours(
@@ -101,23 +118,46 @@ class Vision:
                 continue
 
             x, y, bw, bh = cv2.boundingRect(contour)
+
+            # ---- Shape filtering ----
+            aspect_ratio = bw / float(bh)
+
+            # Reject very skinny / weird shapes (side noise)
+            if aspect_ratio < 0.3 or aspect_ratio > 3:
+                continue
+
+            # Solidity (removes fragmented blobs)
+            hull = cv2.convexHull(contour)
+            hull_area = cv2.contourArea(hull)
+
+            if hull_area == 0:
+                continue
+
+            solidity = area / hull_area
+            if solidity < 0.5:
+                continue
+
+            # ---- Center calculation ----
             cx = x + bw // 2
             cy = y + bh // 2
 
             pixel_dist = ((cx - frame_cx) ** 2 + (cy - frame_cy) ** 2) ** 0.5
 
+            # ---- Draw ----
             cv2.rectangle(display, (x, y), (x + bw, y + bh), (255, 0, 0), 2)
             cv2.circle(display, (cx, cy), 5, (0, 255, 255), -1)
+
             cv2.putText(
                 display,
-                f"Area:{int(area)} D:{int(pixel_dist)}",
+                f"A:{int(area)} S:{solidity:.2f}",
                 (x, max(20, y - 8)),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
+                0.5,
                 (0, 255, 255),
                 2,
             )
 
+            # ---- Best contour selection ----
             if best is None or area > best["area"]:
                 best = {
                     "cx": cx,
@@ -153,3 +193,19 @@ class Vision:
 
     def release(self):
         self.camera.stop()
+
+if __name__ == "__main__":
+    vision = Vision()
+
+    try:
+        while True:
+            detected, cx, cy, area, pixel_dist, display, mask = vision.detect_target()
+            vision.show_preview(display, mask)
+
+            if detected:
+                print(f"Detected target at pixel ({cx}, {cy}) with area {area:.1f}")
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        vision.release()

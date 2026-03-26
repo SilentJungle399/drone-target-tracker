@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 class MavlinkController:
 
-    def __init__(self):
+    def __init__(self, device):
         config = {
-            "device": "tcp:127.0.0.1:5763",
+            "device": device,
         }
 
         self.master = mavutil.mavlink_connection(**config)
@@ -25,6 +25,10 @@ class MavlinkController:
         self.master.target_component = 1
 
         self._request_streams()
+        self.set_max_velocity_params()
+
+    def destroy(self):
+        self.master.close()
 
     def _request_streams(self):
         self.master.mav.request_data_stream_send(
@@ -204,11 +208,40 @@ class MavlinkController:
         self.wait_for_ack(mavutil.mavlink.MAV_CMD_NAV_LAND)
         
         while True:
-            msg = self.master.recv_match(type="GLOBAL_POSITION_INT", blocking=True)
-            if msg and msg.relative_alt <= 0.4:
+            msg = self.master.recv_match(type="GLOBAL_POSITION_INT", blocking=False)
+            if msg and msg.relative_alt / 100 <= 0.4:
                 logger.info("Landed successfully")
                 break
-            time.sleep(0.1)
+            elif msg:
+                logger.info("Current altitude during landing: %.2fm", msg.relative_alt / 1e3)
+                print(msg.relative_alt / 100, 0.4)
+
+    def change_altitude(self, alt):
+        logger.info("Changing altitude -> %s", alt)
+
+        lat, lon, current_alt = self.get_gps_reading(alt = True)
+
+        self.master.mav.set_position_target_global_int_send(
+            0,
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+            int(0b110111111000),  # ignore everything except position
+            int(lat * 1e7),
+            int(lon * 1e7),
+            alt,
+            0, 0, 0,
+            0, 0, 0,
+            0, 0
+        )
+
+        while True:
+            _, _, current_alt = self.get_gps_reading(alt=True)
+            logger.info("Current altitude: %.2f", current_alt)
+
+            if abs(current_alt - alt) <= 0.5:
+                logger.info("Target altitude reached")
+                break
 
     def disarm(self):
         logger.info("Disarming")
@@ -230,6 +263,14 @@ class MavlinkController:
         self.wait_for_ack(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM)
 
     def set_max_velocity_params(self):
+        self.master.mav.param_set_send(
+            self.master.target_system,
+            self.master.target_component,
+            b"",
+            0,
+            mavutil.mavlink.MAV_PARAM_TYPE_REAL32,
+        )
+
         for param in [b"WPNAV_SPEED", b"WPNAV_SPEED_UP", b"WPNAV_SPEED_DN"]:
             self.master.mav.param_set_send(
                 self.master.target_system,

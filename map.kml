@@ -2,7 +2,7 @@
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
 <Document id="1oPu_loUmpnB1UI_7RY_2sBc6_dtw-tKr">
 	<name>NIDAR</name>
-	<gx:CascadingStyle kml:id="__managed_style_2ABCB006953E49C26533">
+	<gx:CascadingStyle kml:id="__managed_style_5EA15392FD3E5F47A070">
 		<Style>
 			<IconStyle>
 				<scale>1.2</scale>
@@ -24,7 +24,7 @@
 			</BalloonStyle>
 		</Style>
 	</gx:CascadingStyle>
-	<gx:CascadingStyle kml:id="__managed_style_158A93262D3E49C26533">
+	<gx:CascadingStyle kml:id="__managed_style_429A8F64333E5F47A070">
 		<Style>
 			<IconStyle>
 				<Icon>
@@ -45,14 +45,14 @@
 			</BalloonStyle>
 		</Style>
 	</gx:CascadingStyle>
-	<StyleMap id="__managed_style_06593E5D7D3E49C26533">
+	<StyleMap id="__managed_style_3696219EA23E5F47A070">
 		<Pair>
 			<key>normal</key>
-			<styleUrl>#__managed_style_158A93262D3E49C26533</styleUrl>
+			<styleUrl>#__managed_style_429A8F64333E5F47A070</styleUrl>
 		</Pair>
 		<Pair>
 			<key>highlight</key>
-			<styleUrl>#__managed_style_2ABCB006953E49C26533</styleUrl>
+			<styleUrl>#__managed_style_5EA15392FD3E5F47A070</styleUrl>
 		</Pair>
 	</StyleMap>
 	<Placemark id="03D9BF44243CDE9CAC93">
@@ -67,12 +67,12 @@
 			<range>496.2227604113286</range>
 			<altitudeMode>absolute</altitudeMode>
 		</LookAt>
-		<styleUrl>#__managed_style_06593E5D7D3E49C26533</styleUrl>
+		<styleUrl>#__managed_style_3696219EA23E5F47A070</styleUrl>
 		<Polygon>
 			<outerBoundaryIs>
 				<LinearRing>
 					<coordinates>
-						76.81716719010525,29.94486533992198,0 76.81734049698294,29.94481929760936,0 76.81737486252217,29.94489242744899,0 76.81740596982502,29.94499661376222,0 76.81733252011149,29.94503303699678,0 76.81721084788572,29.94505711481318,0 76.81716719010525,29.94486533992198,0 
+						76.8171507961555,29.94487726865708,0 76.81737300741715,29.94484173309197,0 76.81739946434686,29.94495993328938,0 76.81741512140465,29.94503660094056,0 76.81733045381344,29.94504909771171,0 76.81718916253593,29.94507044170778,0 76.8171507961555,29.94487726865708,0 
 					</coordinates>
 				</LinearRing>
 			</outerBoundaryIs>
